@@ -23,7 +23,7 @@ proxy-online-mode: false
 auth-method: ACCOUNT
 
 # The GUI account list index (0 indexed) of the account if the auth method is set to account.
-minecraft-account-index: 1
+minecraft-account-index: 0
 
 # Use BetaCraft authentication for classic servers.
 # Enabling BetaCraft Auth allows you to join classic servers which have online mode enabled.

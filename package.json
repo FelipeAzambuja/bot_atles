@@ -2,6 +2,8 @@
   "dependencies": {
     "@google/genai": "^1.38.0",
     "@modelcontextprotocol/sdk": "^0.7.0",
-    "mineflayer": "^4.33.0"
+    "canvas": "^3.2.1",
+    "mineflayer": "^4.33.0",
+    "prismarine-viewer": "^1.33.0"
   }
 }

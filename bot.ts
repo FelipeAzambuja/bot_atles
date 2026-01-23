@@ -1,5 +1,6 @@
 import mineflayer from 'mineflayer';
 import { GoogleGenAI, Type } from '@google/genai';
+const mineflayerViewer = require('prismarine-viewer').mineflayer;
 
 // ============================================================================
 // CONFIGURAÇÃO INICIAL
@@ -56,6 +57,7 @@ const SYSTEM_PROMPT = `Você é um bot assistente inteligente e bem-humorado em 
 4. Ser direto, irreverente e com senso de humor adulto nas respostas
 5. Manter respostas curtas (máximo 2-3 linhas de chat)
 6. Usar linguagem casual, descontraída e com pitadas de sarcasmo quando apropriado
+7. Sempre que possivel pode usar piadas mais adultas e de duplo sentido
 
 Responda em português brasileiro. Pode fazer piadas mais ousadas e referências para público adulto. Se a pergunta não for sobre Minecraft, tente relacionar com o jogo ou faça uma piada inteligente.
 `;
@@ -151,8 +153,15 @@ const TOOLS: ToolConfig[] = [
     {
         name: 'dormir',
         description: `
-        Chame esta função quando o jogador pedir para o bot dormir, descansar ou ir para a cama.
-        O bot deve encontrar uma cama próxima e dormir nela.
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "dormir", "ir dormir", "vai dormir", "dorme"
+            - pedir para o bot descansar, ir para a cama ou "sleep"
+            - mencionar cama, repouso ou recuperação de sono
+            - disser frases como "tá cansado?", "vai descansar?"
+
+            O bot deve encontrar uma cama próxima e dormir nela.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame dormir.
     `,
         parameters: {
             type: Type.OBJECT,
@@ -160,10 +169,16 @@ const TOOLS: ToolConfig[] = [
             required: []
         },
         handler: async (_args: any, username: string) => {
+            const isDaytime = bot.time.timeOfDay < 12000;
+            if (!isDaytime) {
+                return 'Só durmo à noite, e agora é dia!';
+            }
+
             const bed = bot.blockAtCursor(256, (block: any) => block.name.includes('bed'));
 
             if (!bed) {
-                return 'Não achei uma cama por perto pra dormir.';
+                bot.chat('/deitar');
+                return 'Vou deitar agora.';
             }
 
             try {
@@ -172,6 +187,40 @@ const TOOLS: ToolConfig[] = [
             } catch (err) {
                 console.error('Erro ao dormir:', err);
                 return 'Tentei dormir, mas algo deu errado.';
+            }
+        }
+    },
+    {
+        name: 'acordar',
+        description: `
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "acordar", "acorda", "levanta", "sai da cama"
+            - pedir para o bot se levantar, sair do sono ou "wake up"
+            - mencionar que está na cama e precisa se levantar
+            - disser frases como "já acordou?", "levanta daí"
+
+            O bot deve sair da cama se estiver dormindo.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame acordar.
+        `,
+        parameters: {
+            type: Type.OBJECT,
+            properties: {},
+            required: []
+        },
+        handler: async (_args: any, username: string) => {
+            if (!bot.isSleeping) {
+                return `Já estou acordado, ${username}!`;
+            }
+
+            try {
+                await bot.wake();
+
+
+                return `Acordando... Bom dia, ${username}!`;
+            } catch (err) {
+                console.error('Erro ao acordar:', err);
+                return 'Tentei acordar, mas algo deu errado.';
             }
         }
     },
@@ -222,6 +271,8 @@ bot.on('spawn', () => {
     if (BOT_PASSWORD) {
         bot.chat(`/logar ${BOT_PASSWORD}`);
     }
+    mineflayerViewer(bot, { port: 3000 }); // Start the viewing server on port 3000
+
 });
 
 bot.on('login', () => {
@@ -240,6 +291,22 @@ bot.on('end', (reason) => {
     console.log(`[DISCONNECTED] ${reason}`);
 });
 
+
+bot.on('time', () => {
+    console.log(`[TIME] ${bot.time.timeOfDay}`);
+
+
+    if (bot.time.timeOfDay >= 12000 && bot.time.timeOfDay < 23000) {
+        bot.chat('/deitar');
+    }
+    if (bot.time.timeOfDay >= 0 && bot.time.timeOfDay < 12000) {
+        // bot.chat('/levantar');
+        bot.wake();
+        bot.chat('/deitar');
+        bot.setControlState('sneak', true);
+    }
+
+});
 // ============================================================================
 // HANDLERS DE EVENTOS - MENSAGENS DO CHAT
 // ============================================================================
