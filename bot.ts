@@ -224,6 +224,32 @@ const TOOLS: ToolConfig[] = [
             }
         }
     },
+    {
+        name: 'passar_coordenadas',
+        description: `
+            Chame ESTA FUNÇÃO sempre que o jogador pedir "onde voce esta", "onde você está" ou similar.
+            Deve retornar apenas as coordenadas do próprio bot no formato "x, y, z".
+            O resultado será enviado no chat público.
+        `,
+        parameters: {
+            type: Type.OBJECT,
+            properties: {},
+            required: []
+        },
+        handler: async (_args: any, _username: string) => {
+            try {
+                const pos = bot.entity?.position;
+                if (!pos) return '0, 0, 0';
+                const x = Math.floor(pos.x);
+                const y = Math.floor(pos.y);
+                const z = Math.floor(pos.z);
+                return `estou nas coordenadas: ${x}, ${y}, ${z}`;
+            } catch (err) {
+                console.error('Erro ao obter coordenadas:', err);
+                return '0, 0, 0';
+            }
+        }
+    },
 
 ];
 
@@ -261,6 +287,14 @@ function extractFullMessage(obj: any): string {
     }
 
     return result;
+}
+
+function normalizeText(s: string) {
+    try {
+        return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    } catch (err) {
+        return String(s).toLowerCase();
+    }
 }
 
 // ============================================================================
