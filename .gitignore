@@ -1,0 +1,32 @@
+# Node / package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun.lockb
+
+# Environment
+.env
+
+# Logs
+logs/
+*.log
+*.log.*
+*.gz
+
+# Build / cache
+.tmp/
+.cache/
+dist/
+coverage/
+
+# Minecraft / server artifacts
+*.jar
+!via_proxy.jar
+ViaLoader/viabedrock/blob_cache/
+ViaLoader/viabedrock/server_packs/
+
+# OS junk
+.DS_Store
+Thumbs.db
