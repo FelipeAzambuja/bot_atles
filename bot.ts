@@ -328,7 +328,7 @@ bot.on('message', async (message) => {
 
     try {
         const response = await ai.models.generateContent({
-            model: 'gemini-2.0-flash-exp',
+            model: 'gemini-flash-lite-latest',
             contents: `${SYSTEM_PROMPT}${buildHistoryContext(username)}\n\n${username} disse: ${userMessage}`,
             config: {
                 automaticFunctionCalling: {
