@@ -239,14 +239,14 @@ const TOOLS: ToolConfig[] = [
         handler: async (_args: any, _username: string) => {
             try {
                 const pos = bot.entity?.position;
-                if (!pos) return '0, 0, 0';
+                if (!pos) return 'estou nas coordenadas 0, 0, 0,';
                 const x = Math.floor(pos.x);
                 const y = Math.floor(pos.y);
                 const z = Math.floor(pos.z);
-                return `estou nas coordenadas: ${x}, ${y}, ${z}`;
+                return `estou nas coordenadas ${x}, ${y}, ${z},`;
             } catch (err) {
                 console.error('Erro ao obter coordenadas:', err);
-                return '0, 0, 0';
+                return 'estou nas coordenadas 0, 0, 0,';
             }
         }
     },
