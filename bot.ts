@@ -1,5 +1,6 @@
 import mineflayer from 'mineflayer';
 import { GoogleGenAI, Type } from '@google/genai';
+import { pathfinder, Movements, goals } from 'mineflayer-pathfinder';
 const mineflayerViewer = require('prismarine-viewer').mineflayer;
 
 // ============================================================================
@@ -73,6 +74,8 @@ const bot = mineflayer.createBot({
     password: BOT_PASSWORD
 });
 
+bot.loadPlugin(pathfinder);
+
 // ============================================================================
 // FERRAMENTAS DISPONÍVEIS PARA IA
 // ============================================================================
@@ -135,13 +138,55 @@ const TOOLS: ToolConfig[] = [
                 return `Já estou de barriga cheia, ${username}!`;
             }
 
-            const foodItem = bot.inventory.items().find((item: any) => item?.foodPoints && item.foodPoints > 0);
+            let foodItem: any = null;
+
+            const allItems: any[] = [];
+            const inventoryItems = bot.inventory.items();
+            allItems.push(...inventoryItems);
+
+            if (bot.currentWindow) {
+                allItems.push(...bot.currentWindow.items());
+            }
+
+            const containers = (bot as any).containers;
+            if (containers) {
+                for (const container of Object.values(containers)) {
+                    if (container && typeof container === 'object' && 'items' in container) {
+                        const items = (container as any).items();
+                        if (Array.isArray(items)) {
+                            allItems.push(...items);
+                        }
+                    }
+                }
+            }
+
+            console.log(`[COMER] Total items found: ${allItems.length}`);
+            console.log(`[COMER] Inventory items: ${inventoryItems.length}`);
+            
+            const edibleNames = ['apple', 'bread', 'cooked_beef', 'cooked_chicken', 'cooked_mutton', 'cooked_pork', 'cooked_rabbit', 'baked_potato', 'carrot', 'beetroot', 'melon', 'sweet_berries', 'glow_berries', 'golden_apple', 'enchanted_golden_apple', 'pufferfish', 'raw_cod', 'cooked_cod', 'raw_salmon', 'cooked_salmon', 'tropical_fish', 'dried_kelp', 'mushroom_stew', 'beetroot_soup', 'rabbit_stew', 'cookie', 'cake', 'pumpkin_pie', 'honey_bottle'];
+            
+            foodItem = allItems.find((item: any) => {
+                if (!item) return false;
+                const itemName = item.name || item.displayName || '';
+                const hasFood = item.foodPoints && item.foodPoints > 0;
+                const isEdible = edibleNames.some(name => itemName.toLowerCase().includes(name));
+                
+                if (hasFood || isEdible) {
+                    console.log(`[COMER] Found food: ${item.displayName || item.name} (foodPoints: ${item.foodPoints}, edible: ${isEdible})`);
+                }
+                return hasFood || isEdible;
+            });
+
             if (!foodItem) {
-                return 'Não tenho nada pra comer no inventário.';
+                console.log('[COMER] No food items found');
+                console.log('[COMER] Available items:', allItems.map((i: any) => i?.name || i?.displayName).join(', '));
+                return 'Não tenho nada pra comer em lugar nenhum.';
             }
 
             try {
+                console.log(`[COMER] Equipping ${foodItem.displayName || foodItem.name}`);
                 await bot.equip(foodItem, 'hand');
+                console.log('[COMER] Consuming food');
                 await bot.consume();
                 return `Comendo ${foodItem.displayName || foodItem.name} pra recuperar a fome.`;
             } catch (err) {
@@ -250,6 +295,73 @@ const TOOLS: ToolConfig[] = [
             }
         }
     },
+    {
+        name: 'seguir',
+        description: `
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "seguir", "vem aqui", "vem comigo", "me segue"
+            - pedir para o bot segui-lo ou acompanhá-lo
+            - mencionar que quer que o bot vá junto
+            - disser frases como "vem", "acompanha", "segue aqui"
+
+            O bot deve começar a seguir o jogador usando pathfinding.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame seguir.
+        `,
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                jogador: {
+                    type: Type.STRING,
+                    description: 'Nome do jogador a seguir. Se não especificado, usar o nome de quem chamou.'
+                }
+            },
+            required: []
+        },
+        handler: async (args: any, username: string) => {
+            try {
+                const targetUsername = args?.jogador || username;
+
+
+                const targetPlayer = Object.values(bot.players).find(player =>
+                    player.username.toLowerCase().includes(targetUsername.toLowerCase()) ||
+                    targetUsername.toLowerCase().includes(player.username.toLowerCase())
+                );
+
+                if (!targetPlayer) {
+                    return `Não encontrei o jogador ${targetUsername} por aqui.`;
+                }
+
+                const targetEntity = targetPlayer.entity;
+                if (!targetEntity) {
+                    return `Não consigo ver ${targetUsername} no momento.`;
+                }
+                if (bot.pathfinder.isMoving()) {
+                    bot.pathfinder.stop();
+                }
+                bot.pathfinder.setGoal(new goals.GoalFollow(targetEntity, 1));
+
+
+
+                const movements = new Movements(bot);
+                movements.allow1by1towers = true;
+                movements.allowEntityDetection = true;
+                movements.allowFreeMotion = true;
+                movements.allowSprinting = true;
+                movements.canDig = true;
+                bot.pathfinder.setMovements(movements);
+
+                const goal = new goals.GoalNear(targetEntity.position.x, targetEntity.position.y, targetEntity.position.z, 1);
+
+                bot.pathfinder.goto(goal);
+
+                return `Vou seguir ${targetUsername} agora!`;
+            } catch (err) {
+                console.error('Erro ao seguir:', err);
+                return 'Tentei seguir, mas algo deu errado.';
+            }
+        }
+    },
 
 ];
 
@@ -305,7 +417,7 @@ bot.on('spawn', () => {
     if (BOT_PASSWORD) {
         bot.chat(`/logar ${BOT_PASSWORD}`);
     }
-    mineflayerViewer(bot, { port: 3000 }); // Start the viewing server on port 3000
+    // mineflayerViewer(bot, { port: 3003 }); // Start the viewing server on port 3000
 
 });
 
