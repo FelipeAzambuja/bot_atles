@@ -1,7 +1,6 @@
 import mineflayer from 'mineflayer';
 import { GoogleGenAI, Type } from '@google/genai';
-import mineflayerViewerPkg from 'prismarine-viewer';
-const mineflayerViewer = mineflayerViewerPkg.mineflayer;
+const mineflayerViewer = require('prismarine-viewer').mineflayer;
 
 // ============================================================================
 // CONFIGURAÇÃO INICIAL
@@ -56,9 +55,12 @@ const SYSTEM_PROMPT = `Você é um bot assistente inteligente e bem-humorado em 
 2. Entreter com piadas sofisticadas, referências pop culture e conversas divertidas
 3. Fornecer dicas estratégicas e otimizações para o jogo
 4. Ser direto, irreverente e com senso de humor adulto nas respostas
-5. Manter respostas curtas (máximo 64 caracteres de chat)
+5. Manter respostas curtas (máximo 2-3 linhas de chat)
 6. Usar linguagem casual, descontraída e com pitadas de sarcasmo quando apropriado
 7. Sempre que possivel pode usar piadas mais adultas e de duplo sentido
+8. Evite termos em inglês
+9. Não use emojis.
+10. texto simples e direto sem formatação.
 
 Responda em português brasileiro. Pode fazer piadas mais ousadas e referências para público adulto. Se a pergunta não for sobre Minecraft, tente relacionar com o jogo ou faça uma piada inteligente.
 `;
@@ -73,6 +75,9 @@ const bot = mineflayer.createBot({
     username: BOT_USERNAME,
     password: BOT_PASSWORD
 });
+
+bot.loadPlugin(pathfinder);
+bot.loadPlugin(pvp);
 
 // ============================================================================
 // FERRAMENTAS DISPONÍVEIS PARA IA
@@ -144,58 +149,14 @@ const TOOLS: ToolConfig[] = [
                     return `Já estou de barriga cheia, ${username}!`;
                 }
 
-                const FOOD_NAMES = [
-                    'bread','apple','cooked_beef','cooked_porkchop','cooked_chicken','cooked_mutton',
-                    'cooked_cod','cooked_salmon','carrot','potato','baked_potato','golden_apple',
-                    'suspicious_stew','melon_slice','pumpkin_pie','cookie','beetroot'
-                ];
+            const foodItem = bot.inventory.items().find((item: any) => item?.foodPoints && item.foodPoints > 0);
+            if (!foodItem) {
+                return 'Não tenho nada pra comer no inventário.';
+            }
 
-                console.log('[COMER] Verificando inventário por comida...');
-                let foodItem = bot.inventory.items().find((item: any) => FOOD_NAMES.includes(item?.name));
-
-                if (!foodItem) {
-                    // Fallback: encontrar qualquer item que pareça alimento pelo displayName ou por propriedade conhecida
-                    foodItem = bot.inventory.items().find((item: any) => {
-                        if (!item) return false;
-                        const name = String(item.name || '').toLowerCase();
-                        if (name.includes('apple') || name.includes('bread') || name.includes('beef') || name.includes('pork') || name.includes('chicken') || name.includes('carrot') || name.includes('potato') || name.includes('cookie')) return true;
-                        return false;
-                    });
-                }
-
-                if (!foodItem) {
-                    console.log('[COMER] Nenhum item de comida encontrado no inventário.');
-                    return 'Não tenho nada pra comer no inventário.';
-                }
-
-                console.log(`[COMER] Encontrado item de comida: ${foodItem.displayName || foodItem.name}`);
+            try {
                 await bot.equip(foodItem, 'hand');
-                console.log('[COMER] Equipado. Ativando item para comer...');
-
-                const beforeFood = bot.food;
-                bot.activateItem();
-
-                // Aguarda mudança no food ou timeout
-                await new Promise<void>((resolve) => {
-                    const timeout = setTimeout(() => {
-                        try { bot.deactivateItem(); } catch (e) {}
-                        console.log('[COMER] Timeout ao tentar comer. Saindo.');
-                        resolve();
-                    }, 5000);
-
-                    function onHealth() {
-                        if (bot.food > beforeFood) {
-                            clearTimeout(timeout);
-                            try { bot.deactivateItem(); } catch (e) {}
-                            bot.removeListener('health', onHealth);
-                            console.log(`[COMER] Comeu com sucesso: food ${beforeFood} -> ${bot.food}`);
-                            resolve();
-                        }
-                    }
-
-                    bot.on('health', onHealth);
-                });
-
+                await bot.consume();
                 return `Comendo ${foodItem.displayName || foodItem.name} pra recuperar a fome.`;
             } catch (err) {
                 console.error('Erro ao comer:', err);
@@ -303,6 +264,206 @@ const TOOLS: ToolConfig[] = [
             }
         }
     },
+    {
+        name: 'seguir',
+        description: `
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "seguir", "vem aqui", "vem comigo", "me segue"
+            - pedir para o bot segui-lo ou acompanhá-lo
+            - mencionar que quer que o bot vá junto
+            - disser frases como "vem", "acompanha", "segue aqui"
+
+            O bot deve começar a seguir o jogador usando pathfinding.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame seguir.
+        `,
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                jogador: {
+                    type: Type.STRING,
+                    description: 'Nome do jogador a seguir. Se não especificado, usar o nome de quem chamou.'
+                }
+            },
+            required: []
+        },
+        handler: async (args: any, username: string) => {
+            try {
+                const targetUsername = args?.jogador || username;
+
+
+                const targetPlayer = Object.values(bot.players).find(player =>
+                    player.username.toLowerCase().includes(targetUsername.toLowerCase()) ||
+                    targetUsername.toLowerCase().includes(player.username.toLowerCase())
+                );
+
+                if (!targetPlayer) {
+                    return `Não encontrei o jogador ${targetUsername} por aqui.`;
+                }
+
+                const targetEntity = targetPlayer.entity;
+                if (!targetEntity) {
+                    return `Não consigo ver ${targetUsername} no momento.`;
+                }
+                if (bot.pathfinder.isMoving()) {
+                    bot.pathfinder.stop();
+                }
+                bot.pathfinder.setGoal(new goals.GoalFollow(targetEntity, 1));
+
+
+
+                const movements = new Movements(bot);
+                movements.allow1by1towers = true;
+                movements.allowEntityDetection = true;
+                movements.allowFreeMotion = true;
+                movements.allowSprinting = true;
+                movements.canDig = true;
+                movements.placeCost = 10;
+                
+                bot.pathfinder.setMovements(movements);
+
+                const goal = new goals.GoalNear(targetEntity.position.x, targetEntity.position.y, targetEntity.position.z, 1);
+
+                bot.pathfinder.goto(goal);
+
+                return `Vou seguir ${targetUsername} agora!`;
+            } catch (err) {
+                console.error('Erro ao seguir:', err);
+                return 'Tentei seguir, mas algo deu errado.';
+            }
+        }
+    },
+    {
+        name: 'atacar_jogador',
+        description: `
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "ataca", "ataque", "mata", "derruba"
+            - pedir para o bot atacar outro jogador
+            - mencionar um nome de jogador junto com "ataca" ou "mata"
+            - disser frases como "derruba fulano", "mata aquele cara"
+
+            O bot deve atacar o jogador especificado usando PvP.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame atacar_jogador.
+        `,
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                alvo: {
+                    type: Type.STRING,
+                    description: 'Nome do jogador a atacar. Se não especificado, usar o nome de quem chamou.'
+                }
+            },
+            required: []
+        },
+        handler: async (args: any, username: string) => {
+            try {
+                const targetUsername = args?.alvo || username;
+
+                const targetPlayer = Object.values(bot.players).find(player =>
+                    player.username.toLowerCase().includes(targetUsername.toLowerCase()) ||
+                    targetUsername.toLowerCase().includes(player.username.toLowerCase())
+                );
+
+                if (!targetPlayer) {
+                    return `Não encontrei ${targetUsername} por aqui.`;
+                }
+
+                const targetEntity = targetPlayer.entity;
+                if (!targetEntity) {
+                    return `Não consigo ver ${targetUsername} agora.`;
+                }
+
+                (bot as any).pvp.attack(targetEntity);
+                return `Atacando ${targetUsername}!`;
+            } catch (err) {
+                console.error('Erro ao atacar jogador:', err);
+                return 'Erro ao atacar.';
+            }
+        }
+    },
+    {
+        name: 'atacar_mob',
+        description: `
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "mata mob", "ataca mob", "mata criatura"
+            - pedir para o bot atacar mobs próximos
+            - mencionar tipos de mobs como "creeper", "zombie", "skeleton"
+            - disser frases como "mata aquele creeper", "ataca o zombie"
+
+            O bot deve atacar o mob especificado ou o mob mais próximo.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame atacar_mob.
+        `,
+        parameters: {
+            type: Type.OBJECT,
+            properties: {
+                tipo: {
+                    type: Type.STRING,
+                    description: 'Tipo de mob a atacar (creeper, zombie, skeleton, etc). Se não especificado, ataca o mob mais próximo.'
+                }
+            },
+            required: []
+        },
+        handler: async (args: any, username: string) => {
+            try {
+                const mobType = args?.tipo?.toLowerCase() || null;
+
+                const mobs = Object.values(bot.entities).filter((entity: any) => {
+                    if (!entity || !entity.type) return false;
+                    const isMob = entity.type === 'mob' || entity.type === 'hostile' || entity.type === 'passive';
+                    
+                    if (!isMob) return false;
+                    if (!mobType) return true;
+                    
+                    const name = entity.name?.toLowerCase() || entity.displayName?.toLowerCase() || '';
+                    return name.includes(mobType);
+                });
+
+                if (mobs.length === 0) {
+                    return mobType ? `Não encontrei ${mobType} por aqui.` : 'Nenhum mob visível.';
+                }
+
+                const closestMob = mobs.reduce((closest: any, current: any) => {
+                    const closestDist = closest.position.distanceTo(bot.entity.position);
+                    const currentDist = current.position.distanceTo(bot.entity.position);
+                    return currentDist < closestDist ? current : closest;
+                });
+
+                (bot as any).pvp.attack(closestMob);
+                return `Atacando ${closestMob.displayName || closestMob.name}!`;
+            } catch (err) {
+                console.error('Erro ao atacar mob:', err);
+                return 'Erro ao atacar mob.';
+            }
+        }
+    },
+    {
+        name: 'parar_ataque',
+        description: `
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "para", "para de atacar", "stop", "parar"
+            - pedir para o bot parar de atacar
+
+            O bot deve parar o ataque PvP.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame parar_ataque.
+        `,
+        parameters: {
+            type: Type.OBJECT,
+            properties: {},
+            required: []
+        },
+        handler: async (_args: any, username: string) => {
+            try {
+                (bot as any).pvp.stop();
+                return 'Parei de atacar.';
+            } catch (err) {
+                console.error('Erro ao parar ataque:', err);
+                return 'Erro ao parar.';
+            }
+        }
+    },
 
 ];
 
@@ -358,7 +519,7 @@ bot.on('spawn', () => {
     if (BOT_PASSWORD) {
         bot.chat(`/logar ${BOT_PASSWORD}`);
     }
-    mineflayerViewer(bot, { port: 3000 }); // Start the viewing server on port 3000
+    // mineflayerViewer(bot, { port: 3003 }); // Start the viewing server on port 3000
 
 });
 
@@ -410,6 +571,14 @@ bot.on('message', async (message) => {
     console.log(`[CHAT] ${username}: ${userMessage}`);
 
     if (!userMessage.toLowerCase().includes('dipirona')) return;
+
+    if (Math.random() < 0.15) {
+        bot.chat('FODA-SE ' + username);
+        return;
+    }
+
+    
+    
 
     pushHistory(username, { role: 'user', text: userMessage });
 
