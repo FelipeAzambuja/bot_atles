@@ -1,6 +1,7 @@
 import mineflayer from 'mineflayer';
 import { GoogleGenAI, Type } from '@google/genai';
-const mineflayerViewer = require('prismarine-viewer').mineflayer;
+import mineflayerViewerPkg from 'prismarine-viewer';
+const mineflayerViewer = mineflayerViewerPkg.mineflayer;
 
 // ============================================================================
 // CONFIGURAÇÃO INICIAL
@@ -55,7 +56,7 @@ const SYSTEM_PROMPT = `Você é um bot assistente inteligente e bem-humorado em 
 2. Entreter com piadas sofisticadas, referências pop culture e conversas divertidas
 3. Fornecer dicas estratégicas e otimizações para o jogo
 4. Ser direto, irreverente e com senso de humor adulto nas respostas
-5. Manter respostas curtas (máximo 2-3 linhas de chat)
+5. Manter respostas curtas (máximo 64 caracteres de chat)
 6. Usar linguagem casual, descontraída e com pitadas de sarcasmo quando apropriado
 7. Sempre que possivel pode usar piadas mais adultas e de duplo sentido
 
@@ -122,8 +123,15 @@ const TOOLS: ToolConfig[] = [
     {
         name: 'comer',
         description: `
-            Chame esta função quando o jogador pedir para o bot comer, alimentar ou matar a fome.
+            Chame ESTA FUNÇÃO sempre que o jogador:
+            - disser "comer", "come", "alimenta", "mata a fome", "está com fome"
+            - pedir para o bot se alimentar, consumir comida ou "eat"
+            - mencionar fome, comida ou necessidade de comer
+            - disser frases como "tá com fome?", "vai comer?"
+
             O bot deve pegar comida do inventário e consumir se estiver com fome.
+            NUNCA responda com texto nesses casos.
+            SEMPRE chame comer.
         `,
         parameters: {
             type: Type.OBJECT,
@@ -131,18 +139,63 @@ const TOOLS: ToolConfig[] = [
             required: []
         },
         handler: async (_args: any, username: string) => {
-            if (bot.food >= 19) {
-                return `Já estou de barriga cheia, ${username}!`;
-            }
-
-            const foodItem = bot.inventory.items().find((item: any) => item?.foodPoints && item.foodPoints > 0);
-            if (!foodItem) {
-                return 'Não tenho nada pra comer no inventário.';
-            }
-
             try {
+                if (bot.food >= 19) {
+                    return `Já estou de barriga cheia, ${username}!`;
+                }
+
+                const FOOD_NAMES = [
+                    'bread','apple','cooked_beef','cooked_porkchop','cooked_chicken','cooked_mutton',
+                    'cooked_cod','cooked_salmon','carrot','potato','baked_potato','golden_apple',
+                    'suspicious_stew','melon_slice','pumpkin_pie','cookie','beetroot'
+                ];
+
+                console.log('[COMER] Verificando inventário por comida...');
+                let foodItem = bot.inventory.items().find((item: any) => FOOD_NAMES.includes(item?.name));
+
+                if (!foodItem) {
+                    // Fallback: encontrar qualquer item que pareça alimento pelo displayName ou por propriedade conhecida
+                    foodItem = bot.inventory.items().find((item: any) => {
+                        if (!item) return false;
+                        const name = String(item.name || '').toLowerCase();
+                        if (name.includes('apple') || name.includes('bread') || name.includes('beef') || name.includes('pork') || name.includes('chicken') || name.includes('carrot') || name.includes('potato') || name.includes('cookie')) return true;
+                        return false;
+                    });
+                }
+
+                if (!foodItem) {
+                    console.log('[COMER] Nenhum item de comida encontrado no inventário.');
+                    return 'Não tenho nada pra comer no inventário.';
+                }
+
+                console.log(`[COMER] Encontrado item de comida: ${foodItem.displayName || foodItem.name}`);
                 await bot.equip(foodItem, 'hand');
-                await bot.consume();
+                console.log('[COMER] Equipado. Ativando item para comer...');
+
+                const beforeFood = bot.food;
+                bot.activateItem();
+
+                // Aguarda mudança no food ou timeout
+                await new Promise<void>((resolve) => {
+                    const timeout = setTimeout(() => {
+                        try { bot.deactivateItem(); } catch (e) {}
+                        console.log('[COMER] Timeout ao tentar comer. Saindo.');
+                        resolve();
+                    }, 5000);
+
+                    function onHealth() {
+                        if (bot.food > beforeFood) {
+                            clearTimeout(timeout);
+                            try { bot.deactivateItem(); } catch (e) {}
+                            bot.removeListener('health', onHealth);
+                            console.log(`[COMER] Comeu com sucesso: food ${beforeFood} -> ${bot.food}`);
+                            resolve();
+                        }
+                    }
+
+                    bot.on('health', onHealth);
+                });
+
                 return `Comendo ${foodItem.displayName || foodItem.name} pra recuperar a fome.`;
             } catch (err) {
                 console.error('Erro ao comer:', err);
