@@ -8,7 +8,7 @@ bind-address: 0.0.0.0:25568
 target-address: atlasft.com.br:25565
 
 # The version ViaProxy should translate to. (See ViaProxy GUI for a list of versions)
-target-version: 1.21.9-1.21.10
+target-version: 1.21.11
 
 # The connect timeout for backend server connections in milliseconds.
 connect-timeout: 8000
@@ -92,6 +92,10 @@ wildcard-domain-handling: NONE
 # Enables handling and rewriting of Simple Voice Chat mod packets.
 simple-voice-chat-support: false
 
+# Fixes an issue where the Fabric Particle API causes disconnects when both the client and server have the mod installed and both are 1.21.5+.
+# See https://github.com/ViaVersion/ViaFabric/issues/428
+fix-fabric-particle-api: true
+
 # Accepts resource packs from the server without showing a prompt to the client.
 # This is required for servers that require a resource pack, but the client can't load it due to version differences.
 fake-accept-resource-packs: true
@@ -99,10 +103,6 @@ fake-accept-resource-packs: true
 # Fixes potential join issues on <= 1.20.1 quilt/fabric servers.
 # It's recommended to only enable this if you are experiencing issues with the config state packet queue (See above issue).
 skip-config-state-packet-queue: false
-
-# If enabled, ViaProxy will send a connection details custom payload packet to the server.
-# This includes the actual client version as well as the ViaProxy version.
-send-connection-details: false
 
 # Disable this if you want to hide IP addresses in the console and log files.
 log-ips: true

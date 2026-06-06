@@ -1,7 +1,8 @@
 import mineflayer from 'mineflayer';
 import { GoogleGenAI, Type } from '@google/genai';
+import { goals, pathfinder } from 'mineflayer-pathfinder';
 const mineflayerViewer = require('prismarine-viewer').mineflayer;
-
+const pvp = require('mineflayer-pvp').plugin;
 // ============================================================================
 // CONFIGURAÇÃO INICIAL
 // ============================================================================
@@ -149,15 +150,19 @@ const TOOLS: ToolConfig[] = [
                     return `Já estou de barriga cheia, ${username}!`;
                 }
 
-            const foodItem = bot.inventory.items().find((item: any) => item?.foodPoints && item.foodPoints > 0);
-            if (!foodItem) {
-                return 'Não tenho nada pra comer no inventário.';
-            }
+                const foodItem = bot.inventory.items().find((item: any) => item.foodPoints && item.foodPoints > 0);
+                if (!foodItem) {
+                    return 'Não tenho nada pra comer no inventário.';
+                }
 
-            try {
-                await bot.equip(foodItem, 'hand');
-                await bot.consume();
-                return `Comendo ${foodItem.displayName || foodItem.name} pra recuperar a fome.`;
+                try {
+                    await bot.equip(foodItem, 'hand');
+                    await bot.consume();
+                    return `Comendo ${foodItem.displayName || foodItem.name} pra recuperar a fome.`;
+                } catch (err) {
+                    console.error('Erro ao comer:', err);
+                    return 'Tentei comer, mas algo deu errado.';
+                }
             } catch (err) {
                 console.error('Erro ao comer:', err);
                 return 'Tentei comer, mas algo deu errado.';
@@ -271,7 +276,7 @@ const TOOLS: ToolConfig[] = [
             - disser "seguir", "vem aqui", "vem comigo", "me segue"
             - pedir para o bot segui-lo ou acompanhá-lo
             - mencionar que quer que o bot vá junto
-            - disser frases como "vem", "acompanha", "segue aqui"
+            - dizer frases como "vem", "acompanha", "segue aqui"
 
             O bot deve começar a seguir o jogador usando pathfinding.
             NUNCA responda com texto nesses casos.
@@ -310,8 +315,8 @@ const TOOLS: ToolConfig[] = [
                 }
                 bot.pathfinder.setGoal(new goals.GoalFollow(targetEntity, 1));
 
-
-
+// usar 'defaultMove' caso de alguma bosta
+                const { Movements } = require('mineflayer-pathfinder');
                 const movements = new Movements(bot);
                 movements.allow1by1towers = true;
                 movements.allowEntityDetection = true;
